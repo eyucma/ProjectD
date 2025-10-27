@@ -7,14 +7,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 # Core metadata for your application (PEP 621)
-name = "placeholder"
+name = "placeholder_eyucma"
 version = "0.1.0"
 description = "A simple backengine for ?"
 readme = "README.md"
 authors = [
   {name = "Erik Ma", email = "eyucma@gmal.com"},
 ]
-license = {text = "MIT"} # Or choose another license
+license = {text = "MIT"} # 
 requires-python = ">=3.9"
 
 # Dependencies your app needs to run (e.g., for the core_engine)

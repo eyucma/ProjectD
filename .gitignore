@@ -2,3 +2,6 @@
 
 # Virtual Environment
 .venv/
+
+# Ignore all notebooks
+*.ipynb
