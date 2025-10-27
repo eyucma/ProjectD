@@ -1,0 +1,43 @@
+# pyproject.toml
+
+[build-system]
+# Standard tools for building Python packages (this is boilerplate)
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# Core metadata for your application (PEP 621)
+name = "placeholder"
+version = "0.1.0"
+description = "A simple backengine for ?"
+readme = "README.md"
+authors = [
+  {name = "Erik Ma", email = "eyucma@gmal.com"},
+]
+license = {text = "MIT"} # Or choose another license
+requires-python = ">=3.9"
+
+# Dependencies your app needs to run (e.g., for the core_engine)
+dependencies = [
+    # Add your runtime libraries here (e.g., pandas, numpy)
+    # "pandas>=2.0", 
+    # "pydantic>=2.0", # Highly recommended for data_models.py
+]
+
+[tool.setuptools.packages]
+# Tell setuptools where to find your code package
+find = {where = ["."], include = ["app"]}
+
+[tool.black]
+# 5. Configuration for the Black code formatter
+line-length = 88
+target-version = ['py39']
+# This tells Black to format the 'app' directory, skipping common dev folders.
+include = '(\.pyi|\.py)$'
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.venv
+)/
+'''
