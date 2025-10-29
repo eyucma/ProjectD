@@ -12,3 +12,6 @@ data/
 
 # Legacy pyporject
 pyproject_old.txt
+
+#pycache
+**/__pycache__/
