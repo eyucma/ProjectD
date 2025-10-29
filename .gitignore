@@ -5,3 +5,10 @@
 
 # Ignore all notebooks
 *.ipynb
+
+
+# Ignore all data
+data/
+
+# Legacy pyporject
+pyproject_old.txt
