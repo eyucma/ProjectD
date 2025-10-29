@@ -1,43 +1,29 @@
-# pyproject.toml
+[project]
+name = "projectd"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Erik Ma", email = "eyucma@gmail.com"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy (>=2.3.4,<3.0.0)",
+    "pandas (>=2.3.3,<3.0.0)",
+    "scipy (>=1.16.3,<2.0.0)",
+    "matplotlib (>=3.10.7,<4.0.0)"
+]
 
 [build-system]
-# Standard tools for building Python packages (this is boilerplate)
-requires = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
-# Core metadata for your application (PEP 621)
-name = "placeholder_eyucma"
-version = "0.1.0"
-description = "A simple backengine for ?"
-readme = "README.md"
-authors = [
-  {name = "Erik Ma", email = "eyucma@gmal.com"},
-]
-license = {text = "MIT"} # 
-requires-python = ">=3.9"
-
-# Dependencies your app needs to run (e.g., for the core_engine)
-dependencies = [
-    # Add your runtime libraries here (e.g., pandas, numpy)
-    # "pandas>=2.0", 
-    # "pydantic>=2.0", # Highly recommended for data_models.py
+[dependency-groups]
+dev = [
+    "pytest (>=8.4.2,<9.0.0)",
+    "black (>=25.9.0,<26.0.0)"
 ]
 
-[tool.setuptools.packages]
-# Tell setuptools where to find your code package
-find = {where = ["."], include = ["app"]}
-
-[tool.black]
-# 5. Configuration for the Black code formatter
-line-length = 88
-target-version = ['py39']
-# This tells Black to format the 'app' directory, skipping common dev folders.
-include = '(\.pyi|\.py)$'
-exclude = '''
-/(
-    \.git
-  | \.mypy_cache
-  | \.venv
-)/
-'''
+[tool.poetry]
+package-mode = false
