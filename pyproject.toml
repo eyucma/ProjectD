@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13.7"
 dependencies = [
     "numpy (>=2.3.4,<3.0.0)",
     "pandas (>=2.3.3,<3.0.0)",
@@ -27,3 +27,7 @@ dev = [
 
 [tool.poetry]
 package-mode = false
+
+[DESIGN]
+# Maximum number of arguments for function/method
+max-args=10
