@@ -1,11 +1,15 @@
 """
-This module contains Binomial pricing function using CoxRossRubinStein
+This module contains Binomial pricing function using CoxRossRubinstein vectorized
+(no-jump forward adjusted)
 """
 
 import numpy as np
 
-from app.utils.types import ArrayLike, Dividend, RiskFree
+from app.utils.types import ArrayLike
+from app.modules.dividend_riskfree import Dividend, RiskFree
 from app.utils.convert import convert_to_numpy
+
+small = 1e-6
 
 
 def crr(
@@ -46,6 +50,7 @@ def crr(
     vol = convert_to_numpy(vol)
 
     num_options = len(S)
+    dt = T / n
 
     # case of non Dividend class q
     if not (isinstance(q, Dividend) or isinstance(r, RiskFree)):
@@ -53,7 +58,6 @@ def crr(
         r = convert_to_numpy(r)
 
         # --- 2. Calculate Parameters (Vectorized across num_options) ---
-        dt = T / n  # Time step (vectorized)
 
         # Risk-neutral drift (log-return mean)
         m = r - q_rate - 0.5 * vol**2
@@ -141,8 +145,51 @@ def crr(
     if not q.fitted:
         q.fit(T, n)
     if not r.fitted:
-        r.fit(T,n)
+        r.fit(T, n)
+
+    u = np.exp(np.sqrt(T * vol / n))
+    d = 1 / u
     div_payments = q.div
-    discount_factors = r.discount_factors
-    
-    return div_payments
+    discount_factors = r.discount_factors  # (len(T),n+1)
+    principal_div = (div_payments * discount_factors).sum(axis=1)  # (len(T))
+    inter_disc = r.intermediate_discount  # (len(T),n)
+    S_adj = np.clip(S - principal_div, small)  # pylint: disable=invalid-name
+    p = (np.exp(inter_disc * np.sqrt(dt[:, None])) - d[:, None]) / (
+        u[:, None] - d[:, None]
+    )
+    v = np.zeros(
+        (len(T), n + 1, n + 1)
+    )  # stores the tree as (option_no,ith_time,jth_price)
+    if call:
+        v[:, -1, :] = np.clip(
+            S_adj[:, None] * u ** (2 * np.arange(n + 1)[None, :] - n) - K[:, None],
+            0,
+            None,
+        )
+    else:
+        v[:, -1, :] = np.clip(
+            K[:, None] - S_adj[:, None] * u ** (2 * np.arange(n + 1)[None, :] - n),
+            0,
+            None,
+        )
+
+    for i in reversed(range(n)):
+        candidate = np.exp(-inter_disc[:, i, None] * dt[:, None]) * (
+            p[:, i, None] * v[:, i + 1, 1 : i + 2]
+            + (1 - p[:, i, None]) * v[:, i + 1, : i + 1]
+        )
+        if american:
+            if call:
+                v[:, i, : i + 1] = np.maximum(
+                    S_adj[:, None] * u[:,None]**(2 * np.arange(i+1)[None,:] - i) - K[:, None],
+                    candidate,
+                )
+            else:
+                v[:, i, : i + 1] = np.maximum(
+                    K[:, None] - S_adj[:, None] * u[:,None]**(2 * np.arange(i+1)[None,:] - i),
+                    candidate,
+                )
+        else:
+            v[:, i, : i + 1] = candidate
+
+    return v[:, 0, 0]

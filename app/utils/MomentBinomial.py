@@ -1,5 +1,5 @@
 """
-This module contains Binomial pricing function using Moment matching
+This module contains Binomial pricing function using Moment matching (Unfinished)
 """
 
 import numpy as np
