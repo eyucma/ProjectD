@@ -134,5 +134,5 @@ class CRR:
             a[:,i,0]=self.build_tree(S,K,T,r,q,vol,n=n_values[i])
         for k in range(1,s):
             factor = 1.0 / (l**k - 1.0)
-            a[:,k:, k] = a[:,k:, k - 1] + (a[:,k:, k - 1] - a[:,k - 1:k, k - 1]) * factor
+            a[:,k:s, k] = a[:,k:s, k - 1] + (a[:,k:s, k - 1] - a[:,k - 1:s-1, k - 1]) * factor
         return a[:,s-1,s-1]

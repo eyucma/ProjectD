@@ -153,9 +153,8 @@ class RiskFree:
         T = convert_to_numpy(T)
         times = np.linspace(0, T, n + 1).T
         if self.is_scalar:
-            self.rs = self.rs + self.data
+            self.rs = np.ones_like(times)*self.data
         else:
-            times = np.linspace(0, T, n + 1).T  # shape (len(T),n+1)
             assert len(T.shape) < 2
             assert not self.f is None
             self.rs = self.f(times)  # shape (len(T),n+1)
