@@ -1,5 +1,5 @@
 """
-This module contains Binomial pricing function using CoxRossRubinstein vectorized
+This module contains legacy Binomial pricing function using CoxRossRubinstein vectorized
 (no-jump forward adjusted)
 """
 

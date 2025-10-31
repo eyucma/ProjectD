@@ -7,7 +7,7 @@ import pandas as pd
 
 # IMPORTANT: This assumes 'bs_calculator.py' is in the same directory.
 # We import the functions needed for testing directly from that file.
-from app.utils.BlackScholes import bs, phi
+from app.pricing.blackscholes import bs, phi
 
 # --- Test Benchmarks ---
 

@@ -4,7 +4,8 @@ This module contains Binomial pricing function using Moment matching (Unfinished
 
 import numpy as np
 
-from app.utils.types import ArrayLike, Dividend, RiskFree
+from app.modules.dividend_riskfree import Dividend, RiskFree
+from app.utils.types import ArrayLike
 from app.utils.convert import convert_to_numpy
 
 
