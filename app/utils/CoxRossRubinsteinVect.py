@@ -147,49 +147,53 @@ def crr(
     if not r.fitted:
         r.fit(T, n)
 
-    u = np.exp(np.sqrt(T * vol / n))
-    d = 1 / u
+    g = vol * np.sqrt(T / n)
+    u = np.exp(g)
+    d = np.exp(-g)
     div_payments = q.div
     discount_factors = r.discount_factors  # (len(T),n+1)
     principal_div = (div_payments * discount_factors).sum(axis=1)  # (len(T))
     inter_disc = r.intermediate_discount  # (len(T),n)
-    S_adj = np.clip(S - principal_div, small)  # pylint: disable=invalid-name
-    p = (np.exp(inter_disc * np.sqrt(dt[:, None])) - d[:, None]) / (
-        u[:, None] - d[:, None]
-    )
+    S_adj = np.clip(S - principal_div, small, None)  # pylint: disable=invalid-name
+    p = (1 / inter_disc - d[:, None]) / (u[:, None] - d[:, None])
     v = np.zeros(
         (len(T), n + 1, n + 1)
     )  # stores the tree as (option_no,ith_time,jth_price)
     if call:
         v[:, -1, :] = np.clip(
-            S_adj[:, None] * u ** (2 * np.arange(n + 1)[None, :] - n) - K[:, None],
+            S_adj[:, None] * np.exp(g[:,None] * (2 * np.arange(n + 1)[None, :] - n))
+            - K[:, None],
             0,
             None,
         )
     else:
         v[:, -1, :] = np.clip(
-            K[:, None] - S_adj[:, None] * u ** (2 * np.arange(n + 1)[None, :] - n),
+            K[:, None]
+            - S_adj[:, None] * np.exp(g[:,None]  * (2 * np.arange(n + 1)[None, :] - n)),
             0,
             None,
         )
 
     for i in reversed(range(n)):
-        candidate = np.exp(-inter_disc[:, i, None] * dt[:, None]) * (
+        candidate = inter_disc[:, i, None] * (
             p[:, i, None] * v[:, i + 1, 1 : i + 2]
             + (1 - p[:, i, None]) * v[:, i + 1, : i + 1]
         )
         if american:
             if call:
                 v[:, i, : i + 1] = np.maximum(
-                    S_adj[:, None] * u[:,None]**(2 * np.arange(i+1)[None,:] - i) - K[:, None],
+                    S_adj[:, None] * np.exp(g[:,None] * (2 * np.arange(i + 1)[None, :] - i))
+                    - K[:, None],
                     candidate,
                 )
             else:
                 v[:, i, : i + 1] = np.maximum(
-                    K[:, None] - S_adj[:, None] * u[:,None]**(2 * np.arange(i+1)[None,:] - i),
+                    K[:, None]
+                    - S_adj[:, None]
+                    * np.exp(g[:,None] * (2 * np.arange(i + 1)[None, :] - i)),
                     candidate,
                 )
         else:
             v[:, i, : i + 1] = candidate
 
-    return v[:, 0, 0]
+    return v

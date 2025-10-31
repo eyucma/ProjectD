@@ -36,8 +36,7 @@ class Dividend:
         """
         T = convert_to_numpy(T)
         assert len(T.shape) < 2
-        self.div = np.zeros_like((len(T), n + 1))
-
+        self.div = np.zeros((len(T), n + 1))
         for time, cash in self.data:
             valid_maturities_idx = np.where(T >= time)[0]
             if len(valid_maturities_idx) == 0:
@@ -81,7 +80,7 @@ class RiskFree:
         assert len(T.shape) < 2
         self.rs = self.f(times)  # shape (len(T),n+1)
         self.discount_factors = np.exp(-self.rs * times)
-        self.intermediate_discount = (
-            self.discount_factors[:, 1:] / self.discount_factors[:, :-1]
+        self.intermediate_discount = np.exp(
+            (self.rs * times)[:, :-1] - (self.rs * times)[:, 1:]
         )  # BEWARE shape (len(T),n)
         self.fitted = True
