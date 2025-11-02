@@ -19,12 +19,12 @@ def convert_to_numpy(data: ArrayLike | float | int) -> np.ndarray:
         return np.array(data)
 
     # 2. Handle supported container types
-    if isinstance(data, ARRAY_LIKE_RUNTIME_TYPES):
+    if isinstance(data, ARRAY_LIKE_RUNTIME_TYPES): # type: ignore
 
         # Deep validation for lists
         if isinstance(data, list):
             for item in data:
-                if not isinstance(item, NUMERIC_RUNTIME_TYPES):
+                if not isinstance(item, NUMERIC_RUNTIME_TYPES): # type: ignore
                     raise TypeError(
                         f"List input contains unsupported element type: {type(item).__name__}"
                     )

@@ -6,7 +6,7 @@ from typing import Callable
 
 import numpy as np
 
-from app.utils.types import ArrayLike, Numeric
+from app.utils.types import ArrayLike, Numeric, ArrayLike2
 from app.utils.convert import convert_to_numpy
 
 
@@ -40,11 +40,13 @@ class Dividend:
         fit: fits the Dividend data into a form compatability with binomial models
     """
 
-    def __init__(self, data: ArrayLike | Numeric, procent: bool = False) -> None:
+    def __init__(
+        self, data: ArrayLike2 | Numeric, procent: bool = False, forward: bool = False
+    ) -> None:
         self.is_scalar = False
         if isinstance(data, (float, int)):
             self.is_scalar = True
-        self.data = convert_to_numpy(data)
+        self.data = np.asarray(data)
         self.procent = procent
         if procent:
             if self.is_scalar:
@@ -54,7 +56,7 @@ class Dividend:
         self.factors = None
         self.cash_paid = None
         self.n = 0
-        self.forward = False
+        self.forward = forward
 
     def _convert(
         self, x: np.ndarray, s: np.ndarray, to_rate: bool = True
@@ -72,9 +74,7 @@ class Dividend:
     def fit(
         self,
         T: ArrayLike,  # pylint: disable=invalid-name
-        S: ArrayLike,  # pylint: disable=invalid-name
         n: int = 100,
-        forward: bool = False,
     ) -> None:
         """
         fits the Dividend data into a form compatability with binomial models,
@@ -91,12 +91,12 @@ class Dividend:
         forward: boolean, True if this class is used for forward adjustments
         Note this assumes that (t_i,D_i) t_i is the x-day
         """
-        self.forward = forward
         self.factors = np.ones((len(T), n + 1))
 
-        T = convert_to_numpy(T)
-        S = convert_to_numpy(S)
+        T = convert_to_numpy(T)  # type: ignore
+
         assert len(T.shape) < 2
+        assert (self.forward) or self.procent or self.is_scalar
 
         if self.is_scalar:
             div_yields = np.ones((len(T), n + 1)) * self.data * T[:, None] / n
@@ -110,14 +110,44 @@ class Dividend:
                 index_rate = time * n / T[valid_maturities_idx]
                 step_indices = np.floor(index_rate).astype(int)
                 np.add.at(m, (valid_maturities_idx, step_indices), cash)
-            if forward:
-                assert not self.procent
+            if self.forward:
                 self.cash_paid = m
+                self.factors = np.ones((len(T), n + 1))
             else:
-                if not self.procent:
-                    m = self._convert(m, S[:, None])
                 self.factors = shifted_cumprod(1 - m, axis=1)
             self.n = n
+
+    def special_fit(
+        self,
+        T: ArrayLike,  # pylint: disable=invalid-name
+        S: ArrayLike,  # pylint: disable=invalid-name
+        vol: ArrayLike,  # pylint: disable=invalid-name
+        rs: ArrayLike,
+        n: int = 100,
+    ):
+        """
+        Same as above but makes adjusts flat dividend amounts to get a percentage
+        yield based on q_t=Div/S_0*exp((vol^2-r)t) based on the expected value of
+        1/S_t.
+        """
+        self.factors = np.ones((len(T), n + 1))
+        t = convert_to_numpy(T)
+        s = convert_to_numpy(S)
+        sig = convert_to_numpy(vol)
+
+        m = np.zeros((len(t), n + 1))
+        times = np.linspace(0, t, n + 1).T
+        for time, cash in self.data:
+            valid_maturities_idx = np.where(t >= time)[0]
+            if len(valid_maturities_idx) == 0:
+                continue
+            index_rate = time * n / t[valid_maturities_idx]
+            step_indices = np.floor(index_rate).astype(int)
+            np.add.at(m, (valid_maturities_idx, step_indices), cash)
+        s_adj = s[:, None] * np.exp((rs - sig[:, None] ** 2) * times)
+        m = self._convert(m, s=s_adj)
+        self.factors = shifted_cumprod(1 - m, axis=1)
+        self.n = n
 
 
 class RiskFree:
@@ -132,14 +162,19 @@ class RiskFree:
         fit: fits the Dividend data into a form compatability with binomial models
     """
 
-    def __init__(self, data: ArrayLike | Numeric, f: Callable | None = None) -> None:
+    def __init__(
+        self, data: Numeric | None = None, f: Callable[[np.ndarray], np.ndarray] | None = None
+    ) -> None:
         self.is_scalar = False
         if isinstance(data, (float, int)):
             self.is_scalar = True
-        self.data = convert_to_numpy(data)
-        self.discount_factors = np.zeros_like(data)  # placeholder
-        self.rs = np.zeros_like(data)  # placeholder
-        self.intermediate_discount = np.zeros_like(data)  # placeholder
+            self.data = np.asarray(data)
+        else:
+            assert not f is None
+        # self.data = np.asarray(data)
+        self.discount_factors = None  # placeholder
+        self.rs = None  # stores continous rs
+        self.intermediate_discount = None  # placeholder
         self.f = f
         self.n = 0
 
@@ -150,12 +185,12 @@ class RiskFree:
         T: time to maturity, must be 1d arraylike
         n: integer to discretize it
         """
-        T = convert_to_numpy(T)
-        times = np.linspace(0, T, n + 1).T
+        t = convert_to_numpy(T)
+        times = np.linspace(0, t, n + 1).T
         if self.is_scalar:
-            self.rs = np.ones_like(times)*self.data
+            self.rs = np.ones_like(times) * self.data
         else:
-            assert len(T.shape) < 2
+            assert len(t.shape) < 2
             assert not self.f is None
             self.rs = self.f(times)  # shape (len(T),n+1)
         self.intermediate_discount = np.exp(
@@ -163,3 +198,46 @@ class RiskFree:
         )  # BEWARE shape (len(T),n)
         self.discount_factors = np.exp(-self.rs * times)
         self.n = n
+
+
+class Pairqr:
+    """
+    Class for handling dividend, risk free pair
+    Parameters:
+        data: has to be a nx2 np.array or list of list in that shape each pair is of form
+          (time, dividend paid) or (time, dividend yield) notably time is relative,
+          with 0 being the time of considerations.
+           Alternatively, a scalar which is cast in a form compatible
+        procent: boolean if inpute rate if procent instead of
+
+    Submodules:
+        fit: fits the Dividend data into a form compatability with binomial models
+    """
+
+    def __init__(
+        self,
+        data_q: ArrayLike2 | Numeric,
+        data_r: Numeric | None = None,
+        procent: bool = False,
+        forward: bool = False,
+        f: Callable[..., np.ndarray] | None = None,
+    ) -> None:
+        self.q = Dividend(data=data_q, procent=procent, forward=forward)
+        self.r = RiskFree(data=data_r, f=f)
+        self.n = 0
+
+    def fit(
+        self,
+        T: ArrayLike,  # pylint: disable=invalid-name
+        S: ArrayLike | None = None,  # pylint: disable=invalid-name
+        vol: ArrayLike | None = None,
+        n: int = 100,
+    ) -> None:
+        self.r.fit(T=T, n=n)
+        if self.q.forward or self.q.procent:
+            self.q.fit(T=T, n=n)
+        else:
+            assert not vol is None
+            assert not S is None
+            assert isinstance(self.r.rs,np.ndarray)
+            self.q.special_fit(T=T, n=n, S=S, rs=self.r.rs, vol=vol)

@@ -15,3 +15,6 @@ pyproject_old.txt
 
 #pycache
 **/__pycache__/
+
+#scrapers and stuff:
+scraper.py
