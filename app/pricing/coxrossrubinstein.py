@@ -5,6 +5,7 @@ This module contains Binomial pricing function using CoxRossRubinstein defined a
 import numpy as np
 
 from typing import Literal
+#from numba import njit
 
 from app.utils.types import ArrayLike
 from app.modules.dividend_riskfree import Pairqr
@@ -43,6 +44,7 @@ class CRR:
             return np.maximum(s - k, 0)
         return np.maximum(k - s, 0)
 
+    #@njit
     def __call__(
         self,
         S: ArrayLike,  # pylint: disable=invalid-name

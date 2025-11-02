@@ -51,39 +51,50 @@ class VolCalibrator:
         v_high = np.full(num_options, vol_high)
         v_mid = (v_low - v_high) / 2
 
-        def _price_batch(vol_guess: np.ndarray):
-            if use_extrapolation:
-                return self.model.extr(S=S_np, K=K_np, T=T_np, qr=qr, vol=vol_guess, **extr_kwargs)  # type: ignore
-            else:
-                return self.model(S=S_np, K=K_np, T=T_np, qr=qr, vol=vol_guess, n=n)  # type: ignore
-
-        # --- Pre-calculate prices at the boundaries ---
-        # Note: qr.fit will be called inside price_batch on the first run
-        price_low = _price_batch(v_low)
-        price_high = _price_batch(v_high)
-        price_mid = _price_batch(v_mid)
+        if use_extrapolation:
+            price_low = self.model.extr(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_low, **extr_kwargs)  # type: ignore
+            price_high = self.model.extr(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_high, **extr_kwargs)  # type: ignore
+        else:
+            price_low = self.model(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_low, n=n)  # type: ignore
+            price_high = self.model(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_high, n=n)  # type: ignore
 
         # --- Error checking (optional but recommended) ---
         # Find options where the market price is outside the bracket
-        failed_bracket = (P_market < price_low) | (P_market > price_high)
+        too_low = P_market < price_low
+        too_high = P_market > price_high
+        failed_bracket = too_low | too_high
         if np.any(failed_bracket):
             print(
                 f"Warning: {np.sum(failed_bracket)} options are outside the initial vol bracket."
             )
             # Clamp market prices to be within the bracket for stability
             P_market = np.clip(P_market, price_low + 1e-10, price_high - 1e-10)
+        idx_valid = ~failed_bracket
+        S_valid = S_np[idx_valid]
+        K_valid = K_np[idx_valid]
+        T_valid = T_np[idx_valid]
+        P_market_valid = P_market[idx_valid]
+
+        v_low = np.full(len(S_valid), vol_low)
+        v_high = np.full(len(S_valid), vol_high)
+        v_mid = (v_low + v_high) / 2.0
+
+
+        def _price_batch(vol_guess: np.ndarray):
+            if use_extrapolation:
+                return self.model.extr(S=S_valid, K=K_valid, T=T_valid, qr=qr, vol=vol_guess, **extr_kwargs)  # type: ignore
+            else:
+                return self.model(S=S_valid, K=K_valid, T=T_valid, qr=qr, vol=vol_guess, n=n)  # type: ignore
 
         iterations = int(np.ceil(np.log((vol_high - vol_low) / fidelity) / np.log(2)))
-        err = price_mid - P_market
         # --- Vectorized Bisection Loop ---
         for _ in trange(iterations, mininterval=0.5):
-            v_mid = (v_low + v_high) / 2.0
 
             # This is the key: one call prices ALL options
             price_mid = _price_batch(v_mid)
 
             # Calculate error for all options
-            err = price_mid - P_market
+            err = price_mid - P_market_valid
 
             # Vectorized update:
             # Where err > 0 (price is too high), our new v_high is v_mid
@@ -91,9 +102,13 @@ class VolCalibrator:
             is_too_high = err > 0
             v_high = np.where(is_too_high, v_mid, v_high)
             v_low = np.where(is_too_high, v_low, v_mid)
+            np.add(v_low, v_high, out=v_mid)
+            v_mid *= 0.5
 
         # The result is the midpoint of the final bracket
-        v_final = (v_low + v_high) / 2.0
+        v_final = np.full_like(S_np, vol_high)
+        v_final[too_low] = vol_low
+        v_final[idx_valid] = v_mid
 
         # Return NaN for options that failed the initial bracketing
         # v_final[failed_bracket] = np.nan
