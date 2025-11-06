@@ -116,3 +116,45 @@ def bs(
     if call:
         return S * np.exp(-q * T) * cdf(dp) - K * np.exp(-r * T) * cdf(dm)
     return K * np.exp(-r * T) * cdf(-dm) - S * np.exp(-q * T) * cdf(-dp)
+
+
+def bs76(
+    F: ArrayLike | float | int,  # pylint: disable=invalid-name
+    k: ArrayLike | float | int,  # pylint: disable=invalid-name
+    T: ArrayLike | float | int,  # pylint: disable=invalid-name
+    DF: ArrayLike | float | int,
+    vol: ArrayLike | float | int,
+    call: bool = True,
+    approx: bool = True,
+) -> np.ndarray:
+    """
+    Compute BlackScholes options price. Units in years time
+
+    Parameters:
+        price: observed option price
+        S: underlying spot price
+        K: strike price
+        T: time to maturity (in years)
+        r: risk-free rate
+        q: dividend yield
+        vol: volatility
+        call: True for call False for put
+
+    Returns:
+        Option price
+    """
+
+    # --- Input Conversion ---
+    S = convert_to_numpy(F)
+    k = convert_to_numpy(k)
+    T = convert_to_numpy(T)
+    DF = convert_to_numpy(DF)
+    vol = convert_to_numpy(vol)
+
+    cdf = phi if approx else norm.cdf
+
+    dp = (k + vol**2 / 2 * T) / vol / np.sqrt(T)
+    dm = (k - vol**2 / 2 * T) / vol / np.sqrt(T)
+    if call:
+        return DF*F*(cdf(dp) -  np.exp(-k) * cdf(dm))
+    return DF * F*(np.exp(-k) *cdf(-dm) - cdf(-dp))

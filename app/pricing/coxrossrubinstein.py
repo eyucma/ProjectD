@@ -5,7 +5,7 @@ This module contains Binomial pricing function using CoxRossRubinstein defined a
 import numpy as np
 
 from typing import Literal
-#from numba import njit
+from numba import njit, prange
 
 from app.utils.types import ArrayLike
 from app.modules.dividend_riskfree import Pairqr
@@ -13,6 +13,80 @@ from app.utils.convert import convert_to_numpy
 
 SMALL = 1e-6
 
+@njit(parallel=True) # type: ignore
+def loop(p: np.ndarray, inter: np.ndarray, pay: np.ndarray, n: int, american: bool = True) -> np.ndarray:
+    m = pay.shape[0]  # number of options
+    v_last = pay[:, -1, :].copy()  # shape (m, n+1)
+    
+    for i in range(n-1, -1, -1):
+        v_next = np.zeros((m, i+1))
+        
+        # vectorized over options
+        for j in prange(i+1): # type: ignore
+            v_next[:, j] = inter[:, i] * (p[:, i] * v_last[:, j+1] + (1 - p[:, i]) * v_last[:, j])
+        
+        if american:
+            # ensure shapes match exactly
+            v_next = np.maximum(v_next, pay[:, i, :i+1])
+        
+        v_last = v_next  # next step
+    
+    return v_last[:, 0]
+
+
+@njit(parallel=True) # type: ignore
+def loop_error(
+    p: np.ndarray,
+    inter: np.ndarray,
+    pay: np.ndarray,
+    n: int,
+    #    store_tree: bool = False,
+    american: bool = True,
+) -> np.ndarray:
+    # if store_tree:
+    #    v = np.zeros(
+    #        (len(T), n + 1, n + 1)
+    #    )  # stores the tree as (option_no,ith_time,jth_price)
+    #    v[:, -1, :] = v_last
+    v_last = pay[:, -1, :]
+    for i in range(n - 1, -1, -1):
+        # continuation value: inter_disc[:, i, None] has shape (m,1)
+        v_next = inter[:, i, None] * (
+            p[:, i,None] * v_last[:, 1 : i + 2] + (1 - p[:, i, None]) * v_last[: ,0: i + 1]
+        )  # v_next has shape (m, i+1)
+        if american:
+            v_next = np.maximum( pay[:, i, 0:i+1], v_next)
+        # if store_tree:
+        #    v[:, i, : i + 1] = v_next  # type: ignore
+        #    # shape (m, i+1)
+        v_last = v_next
+    # if store_tree:
+    #    return v  # type: ignore
+    return v_last[:, 0]  # type: ignore
+
+
+@njit(parallel=True) # type: ignore
+def build_upper_triangular(
+    S: np.ndarray,
+    K: np.ndarray,
+    g: np.ndarray,
+    factors: np.ndarray,
+    n: int,
+    call: bool,
+) -> np.ndarray:
+    # preallocate triangular array
+    # shape (num_options, n+1, n+1), but we will only fill j <= k
+    M = np.zeros((len(S), n + 1, n + 1))
+    for j in range(n + 1):
+        for k in range(j + 1):  # only k <= j
+            M[:, j, k] = S[:] * factors[:, j] * np.exp(g[:] * (2 * k - j)) - K[:]
+    
+    if call:
+        M= np.maximum(M, 0) # type: ignore
+    else:
+        M= np.maximum(-M, 0) # type: ignore
+
+    return M
 
 class CRR:
     """
@@ -43,8 +117,35 @@ class CRR:
         if self.call:
             return np.maximum(s - k, 0)
         return np.maximum(k - s, 0)
+    
 
-    #@njit
+    def _build_upper_triangular(
+        self,
+        S: np.ndarray,
+        K: np.ndarray,
+        g: np.ndarray,
+        factors: np.ndarray,
+        n: int,
+        call: bool = False,
+    ):
+        j = np.arange(n + 1)
+        k = np.arange(n + 1)
+        exp_term = np.exp(g[:, None, None] * (2 * k[None,None,:] - j[None,:,None]))  # shape (num_opt, n+1, n+1)
+        base = S[:, None, None] * factors[:, :, None] * exp_term - K[:, None, None]
+        M = np.tril(base, 0)  # upper triangular
+        return np.maximum(M, 0) if call else np.maximum(-M, 0)
+
+    def _build_payoff(
+        self, S: np.ndarray, K: np.ndarray, g: np.ndarray, factors: np.ndarray, n: int
+    ) -> np.ndarray:
+        n_nodes = n + 1
+        kj_matrix = 2 * np.arange(n_nodes).reshape(1, n_nodes) - np.arange(
+            n_nodes
+        ).reshape(n_nodes, 1)
+        exp_tensor = np.exp(g[:, None, None] * kj_matrix[None, :, :])
+        M = S[:, None, None] * exp_tensor * factors[:, None, :]
+        return self._payoff(M, K[:, None, None])
+
     def __call__(
         self,
         S: ArrayLike,  # pylint: disable=invalid-name
@@ -72,8 +173,10 @@ class CRR:
             assert not qr.q.cash_paid is None
             assert not qr.r.discount_factors is None
             if qr.q.procent:
-                qr.q.cash_paid = qr.q.cash_paid * S[:, None]
-            principal_div = (qr.q.cash_paid * qr.r.discount_factors).sum(axis=1)
+                cash_paid = qr.q.cash_paid * S[:, None]
+            else:
+                cash_paid = qr.q.cash_paid
+            principal_div = (cash_paid * qr.r.discount_factors).sum(axis=1)
             assert isinstance(principal_div, np.ndarray)
             S = np.clip(S - principal_div, SMALL, None)  # type: ignore
 
@@ -84,17 +187,40 @@ class CRR:
         assert not inter_disc is None
         p = (1 / inter_disc - d[:, None]) / (
             u[:, None] - d[:, None]
-        )  # Assuming dividend is not factored into p
+        )
+        assert np.all(p>0) and np.all(p<1)
+          # Assuming dividend is not factored into p
 
         # cached
-        exp_cache = [
-            np.exp(g[:, None] * (2 * np.arange(i + 1)[None, :] - i))
-            for i in range(n + 1)
-        ]
+        #exp_cache = [
+        #    np.exp(g[:, None] * (2 * np.arange(i + 1)[None, :] - i))
+        #    for i in range(n + 1)
+        #]
 
         assert isinstance(qr.q.factors, np.ndarray)
-        v_last = self._payoff(
-            S[:, None] * exp_cache[-1] * qr.q.factors[:, -1, None], K[:, None]
+
+        # payoff_matrix = self._build_payoff(S=S, K=K, g=g, factors=qr.q.factors, n=n)
+        payoff_matrix = build_upper_triangular(
+            S=S, K=K, g=g, factors=qr.q.factors, n=n, call=self.call
+        )
+
+        # if store_tree:
+        #    self.v = loop(
+        #        T=T,
+        #        p=p,
+        #        inter=inter_disc,
+        #        pay=payoff_matrix,
+        #        n=n,
+        #        store_tree=store_tree,
+        #        american=self.american,
+        #    )
+        #    return self.v[:, 0, 0]
+        return loop(
+            p=p,
+            inter=inter_disc,
+            pay=payoff_matrix,
+            n=n,
+            american=self.american,
         )
 
         if store_tree:
@@ -114,9 +240,7 @@ class CRR:
             if self.american:
                 np.maximum(
                     self._payoff(
-                        S[:, None]
-                        * exp_cache[i]
-                        * qr.q.factors[:, i, None],
+                        S[:, None] * exp_cache[i] * qr.q.factors[:, i, None],
                         K[:, None],
                     ),
                     v_next,
@@ -126,7 +250,7 @@ class CRR:
                 self.v[:, i, : i + 1] = v_next  # type: ignore
                 # shape (m, i+1)
             v_last = v_next
-        return v_last[:,0]
+        return v_last[:, 0]
 
     def extr(
         self,

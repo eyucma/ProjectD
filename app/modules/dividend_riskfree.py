@@ -34,10 +34,12 @@ class Dividend:
           (time, dividend paid) or (time, dividend yield) notably time is relative,
           with 0 being the time of considerations.
            Alternatively, a scalar which is cast in a form compatible
-        procent: boolean if inpute rate if procent instead of
+        procent: boolean, True if inpute rate if procent instead of amount cash paid
+        forward: boolean, True if the forward/hybrid method is to be used.
 
     Submodules:
         fit: fits the Dividend data into a form compatability with binomial models
+        special_fit: fit but allows conversion of cash payments into percentage yield
     """
 
     def __init__(
@@ -110,8 +112,8 @@ class Dividend:
                 index_rate = time * n / T[valid_maturities_idx]
                 step_indices = np.floor(index_rate).astype(int)
                 np.add.at(m, (valid_maturities_idx, step_indices), cash)
+            self.cash_paid = m  # beware this carries different interpretation depending on if percent or cash value
             if self.forward:
-                self.cash_paid = m
                 self.factors = np.ones((len(T), n + 1))
             else:
                 self.factors = shifted_cumprod(1 - m, axis=1)
@@ -145,6 +147,7 @@ class Dividend:
             step_indices = np.floor(index_rate).astype(int)
             np.add.at(m, (valid_maturities_idx, step_indices), cash)
         s_adj = s[:, None] * np.exp((rs - sig[:, None] ** 2) * times)
+        self.cash_paid = m
         m = self._convert(m, s=s_adj)
         self.factors = shifted_cumprod(1 - m, axis=1)
         self.n = n
@@ -154,16 +157,21 @@ class RiskFree:
     """
     Class for handling RiskFree
     Parameters:
-        price: observed option price
-        data: has to be a nx2 np.array or list of list in that shape each pair is of form
-          (time, dividend paid) notably time is relative, with 0 being the time of considerations
-
+    Has to supply either f which maps the risk free curve or
+    data as a numeric with representation a common flat rate.
+        data: has to be a numeric (float,int)
+        f: function that takes np.ndarray time and returns risk free rate up to t
+        dynamic_time: boolean, True if each node in the binomial model requires local risk free rate
+        false if a flat rate is applied across the entire model.
     Submodules:
-        fit: fits the Dividend data into a form compatability with binomial models
+        fit: fits the risk free data into a form compatability with binomial models
     """
 
     def __init__(
-        self, data: Numeric | None = None, f: Callable[[np.ndarray], np.ndarray] | None = None
+        self,
+        data: Numeric | None = None,
+        f: Callable[[np.ndarray], np.ndarray] | None = None,
+        dynamic_time: bool = False,
     ) -> None:
         self.is_scalar = False
         if isinstance(data, (float, int)):
@@ -177,6 +185,7 @@ class RiskFree:
         self.intermediate_discount = None  # placeholder
         self.f = f
         self.n = 0
+        self.dyn_time = dynamic_time
 
     def fit(self, T: ArrayLike, n: int = 100) -> None:  # pylint: disable=invalid-name
         """
@@ -186,13 +195,16 @@ class RiskFree:
         n: integer to discretize it
         """
         t = convert_to_numpy(T)
+        assert len(t.shape) < 2
         times = np.linspace(0, t, n + 1).T
         if self.is_scalar:
             self.rs = np.ones_like(times) * self.data
         else:
-            assert len(t.shape) < 2
             assert not self.f is None
-            self.rs = self.f(times)  # shape (len(T),n+1)
+            if self.dyn_time:
+                self.rs = self.f(times)  # shape (len(T),n+1)
+            else:
+                self.rs = np.ones_like(times) * self.f(t)[:, None]
         self.intermediate_discount = np.exp(
             (self.rs * times)[:, :-1] - (self.rs * times)[:, 1:]
         )  # BEWARE shape (len(T),n)
@@ -225,6 +237,7 @@ class Pairqr:
         self.q = Dividend(data=data_q, procent=procent, forward=forward)
         self.r = RiskFree(data=data_r, f=f)
         self.n = 0
+        self.F_T = 0
 
     def fit(
         self,
@@ -239,5 +252,13 @@ class Pairqr:
         else:
             assert not vol is None
             assert not S is None
-            assert isinstance(self.r.rs,np.ndarray)
+            assert isinstance(self.r.rs, np.ndarray)
             self.q.special_fit(T=T, n=n, S=S, rs=self.r.rs, vol=vol)
+
+    def form_forward(self) -> np.ndarray:
+        assert self.q.forward
+        assert not self.q.cash_paid is None
+        assert not self.r.discount_factors is None
+        return (self.q.cash_paid * self.r.discount_factors).sum(
+            axis=1
+        ) / self.r.discount_factors[:, -1]

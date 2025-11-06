@@ -17,6 +17,7 @@ class VolCalibrator:
     def __init__(self, model: Type[CRR], method: str = "CRR", **kwargs) -> None:  # type: ignore
         self.method = method
         self.model = model(**kwargs)  # type: ignore
+        self.f_T = None
 
     def bisection(
         self,
@@ -26,12 +27,14 @@ class VolCalibrator:
         qr: Pairqr,
         market_prices: ArrayLike,
         n: int | None = None,
-        vol_low: float = 0.001,
-        vol_high: float = 1.5,
+        vol_low: float = 0.05,
+        vol_high: float = 5,
         fidelity: float = 0.001,
         use_extrapolation: bool = False,  # Set to True to use extr
+        get_vega: bool = False,
+        get_forward: bool = True,
         **extr_kwargs,  # type: ignore
-    ):
+    ) -> tuple[np.ndarray, np.ndarray]|np.ndarray:
         """
         Calculates implied volatility for a vector of options using
         a vectorized bisection algorithm.
@@ -58,6 +61,11 @@ class VolCalibrator:
             price_low = self.model(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_low, n=n)  # type: ignore
             price_high = self.model(S=S_np, K=K_np, T=T_np, qr=qr, vol=v_high, n=n)  # type: ignore
 
+        if get_forward:
+            self.f_T = qr.form_forward()
+            if qr.q.procent:
+                self.f_T *= S
+
         # --- Error checking (optional but recommended) ---
         # Find options where the market price is outside the bracket
         too_low = P_market < price_low
@@ -78,7 +86,6 @@ class VolCalibrator:
         v_low = np.full(len(S_valid), vol_low)
         v_high = np.full(len(S_valid), vol_high)
         v_mid = (v_low + v_high) / 2.0
-
 
         def _price_batch(vol_guess: np.ndarray):
             if use_extrapolation:
@@ -104,12 +111,18 @@ class VolCalibrator:
             v_low = np.where(is_too_high, v_low, v_mid)
             np.add(v_low, v_high, out=v_mid)
             v_mid *= 0.5
-
         # The result is the midpoint of the final bracket
         v_final = np.full_like(S_np, vol_high)
+
         v_final[too_low] = vol_low
         v_final[idx_valid] = v_mid
 
+        if get_vega:
+            vega = np.full_like(S_np, np.nan)
+            vega[idx_valid] = (_price_batch(v_high) - _price_batch(v_low)) / (
+                v_high - v_low
+            )
+            return v_final, vega
         # Return NaN for options that failed the initial bracketing
         # v_final[failed_bracket] = np.nan
 
