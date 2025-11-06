@@ -153,8 +153,8 @@ def bs76(
 
     cdf = phi if approx else norm.cdf
 
-    dp = (k + vol**2 / 2 * T) / vol / np.sqrt(T)
-    dm = (k - vol**2 / 2 * T) / vol / np.sqrt(T)
+    dp = (-k + vol**2 / 2 * T) / vol / np.sqrt(T)
+    dm = (-k - vol**2 / 2 * T) / vol / np.sqrt(T)
     if call:
-        return DF*F*(cdf(dp) -  np.exp(-k) * cdf(dm))
-    return DF * F*(np.exp(-k) *cdf(-dm) - cdf(-dp))
+        return DF*F*(cdf(dp) -  np.exp(k) * cdf(dm))
+    return DF * F*(np.exp(k) *cdf(-dm) - cdf(-dp))
