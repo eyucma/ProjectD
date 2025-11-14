@@ -3,6 +3,9 @@
 # Virtual Environment
 .venv/
 
+# typings
+typings/
+
 # Ignore all notebooks
 *.ipynb
 

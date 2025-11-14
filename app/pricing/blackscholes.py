@@ -102,14 +102,14 @@ def bs(
     """
 
     # --- Input Conversion ---
-    S = convert_to_numpy(S)
-    K = convert_to_numpy(K)
-    T = convert_to_numpy(T)
+    S = convert_to_numpy(S) # type: ignore
+    K = convert_to_numpy(K) # type: ignore
+    T = convert_to_numpy(T) # type: ignore
     r = convert_to_numpy(r)
     q = convert_to_numpy(q)
     vol = convert_to_numpy(vol)
 
-    cdf = phi if approx else norm.cdf
+    cdf = phi if approx else norm.cdf # type: ignore
 
     dp = (np.log(S / K) + (r - q + vol**2 / 2) * T) / vol / np.sqrt(T)
     dm = (np.log(S / K) + (r - q - vol**2 / 2) * T) / vol / np.sqrt(T)
@@ -145,16 +145,17 @@ def bs76(
     """
 
     # --- Input Conversion ---
-    S = convert_to_numpy(F)
+    F = convert_to_numpy(F) # type: ignore
     k = convert_to_numpy(k)
-    T = convert_to_numpy(T)
-    DF = convert_to_numpy(DF)
+    T = convert_to_numpy(T) # type: ignore
+    DF = convert_to_numpy(DF) # type: ignore
     vol = convert_to_numpy(vol)
 
     cdf = phi if approx else norm.cdf
-
     dp = (-k + vol**2 / 2 * T) / vol / np.sqrt(T)
     dm = (-k - vol**2 / 2 * T) / vol / np.sqrt(T)
-    if call:
-        return DF*F*(cdf(dp) -  np.exp(k) * cdf(dm))
-    return DF * F*(np.exp(k) *cdf(-dm) - cdf(-dp))
+    return np.where(call,DF*F*(cdf(dp) -  np.exp(k) * cdf(dm)),DF * F*(np.exp(k) *cdf(-dm) - cdf(-dp)))
+
+    #if call:
+    #    return DF*F*(cdf(dp) -  np.exp(k) * cdf(dm))
+    #return DF * F*(np.exp(k) *cdf(-dm) - cdf(-dp))

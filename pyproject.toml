@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.13.7"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "numpy (>=2.3.4,<3.0.0)",
     "pandas (>=2.3.3,<3.0.0)",
@@ -17,7 +17,8 @@ dependencies = [
     "pandera (>=0.26.1,<0.27.0)",
     "pyarrow (>=22.0.0,<23.0.0)",
     "pytest (>=8.4.2,<9.0.0)",
-    "tqdm (>=4.67.1,<5.0.0)"
+    "tqdm (>=4.67.1,<5.0.0)",
+    "numba (>=0.62.1,<0.63.0)"
 ]
 
 [build-system]

@@ -5,7 +5,7 @@ This module contains Binomial pricing function using CoxRossRubinstein defined a
 import numpy as np
 
 from typing import Literal
-from numba import njit, prange
+from numba import njit, prange # type: ignore
 
 from app.utils.types import ArrayLike
 from app.modules.dividend_riskfree import Pairqr
