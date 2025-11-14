@@ -1,3 +1,7 @@
+"""
+This module contains functions to calculate business times as a fraction of a business year
+"""
+
 import pandas as pd
 
 from app.utils.types import Dates
