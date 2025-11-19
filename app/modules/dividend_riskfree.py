@@ -112,7 +112,8 @@ class Dividend:
                 index_rate = time * n / T[valid_maturities_idx]
                 step_indices = np.floor(index_rate).astype(int)
                 np.add.at(m, (valid_maturities_idx, step_indices), cash)
-            self.cash_paid = m  # beware this carries different interpretation depending on if percent or cash value
+            self.cash_paid = m
+            # beware this carries different interpretation depending on if percent or cash value
             if self.forward:
                 self.factors = np.ones((len(T), n + 1))
             else:
@@ -237,7 +238,6 @@ class Pairqr:
         self.q = Dividend(data=data_q, procent=procent, forward=forward)
         self.r = RiskFree(data=data_r, f=f)
         self.n = 0
-        self.F_T = 0
 
     def fit(
         self,
@@ -246,6 +246,9 @@ class Pairqr:
         vol: ArrayLike | None = None,
         n: int = 100,
     ) -> None:
+        '''
+        Auxilary fit to deal with the different cases
+        '''
         self.r.fit(T=T, n=n)
         if self.q.forward or self.q.procent:
             self.q.fit(T=T, n=n)
@@ -256,6 +259,9 @@ class Pairqr:
             self.q.special_fit(T=T, n=n, S=S, rs=self.r.rs, vol=vol)
 
     def form_forward(self) -> np.ndarray:
+        '''
+        Computes forward value under this pair
+        '''
         assert self.q.forward
         assert not self.q.cash_paid is None
         assert not self.r.discount_factors is None
