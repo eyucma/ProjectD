@@ -1,12 +1,15 @@
 # pylint: disable=C0103, R0913, R0914, R0915, R0917
 """
-Class for calibrating volatility surfaces
+Class for calculating imp volatility
 """
-from typing import Type, Dict, Literal
-from tqdm import trange
 
 import inspect
+
+from typing import Type, Dict
+from tqdm import trange
+
 import numpy as np
+import pandas as pd
 
 from app.pricing.coxrossrubinstein import CRR
 from app.modules.dividend_riskfree import Pairqr
@@ -16,17 +19,17 @@ from app.utils.types import ArrayLike
 
 class VolCalibrator:
     """
-    Implied Volatility calibrator
+    Implied Volatility calculator
     """
 
     data: Dict[str, np.ndarray]
+    qr: Pairqr | None
 
     def __init__(self, model: Type[CRR], method: str = "CRR", **kwargs) -> None:  # type: ignore
         self.method = method
         self.model = model(**kwargs)  # type: ignore
         self.data = {}
         self.eval = False
-        self.parameters = None
         self.qr = None
 
     def bisection(
@@ -78,7 +81,7 @@ class VolCalibrator:
             assert not qr.r.discount_factors is None
             self.data["DF"] = qr.r.discount_factors[:, -1]
             self.data["F_T"] = qr.form_forward()
-            self.qr=qr
+            self.qr = qr
             if qr.q.procent:
                 self.data["F_T"] *= S_np
 
@@ -147,9 +150,10 @@ class VolCalibrator:
             )
             self.data["IV"] = v_final
             self.data["T"] = T_np
-            self.data['K'] = K_np
+            self.data["K"] = K_np
             self.data["S"] = S_np
-            self.data["market"] = P_market
+            self.data["Market"] = P_market
+            self.data['w']=self.data['T']*self.data['IV']**2
             if get_vega:
                 vega = np.full_like(S_np, np.nan)
                 vega[idx_valid] = (_price_batch(v_high) - _price_batch(v_low)) / (
@@ -168,37 +172,27 @@ class VolCalibrator:
         # v_final[failed_bracket] = np.nan\
         return v_final
 
-    def form_grid(
-        self, smooth: Literal["gaussian1d", "gaussian2d", None] = None
-    ) -> None:
+    def present(self) -> tuple[pd.DataFrame, Pairqr]|None:
         """
-        Method to form the grid for interpolation
+        Method to return the data
         """
-        self.data["w"] = self.data["T"] * self.data["IV"] ** 2
-        if smooth == "gaussian2d":
-            bandwidth_strike = 0.01
-            bandwidth_time = 0.1
-            dk = (self.data["k"][None, :] - self.data["k"][:, None]) / bandwidth_strike
-            dt = (self.data["T"][None, :] - self.data["T"][:, None]) / bandwidth_time
-            weights = np.exp(-(dk**2) / 2) * np.exp(-(dt**2) / 2)
-            weights /= np.sum(weights, axis=1)[:, None]
-            self.data["w_sm"] = np.sum(weights * self.data["w"][None, :], axis=1)
-        if smooth == "gaussian1d":
-            bandwidth_strike = 0.01
-            dk = (self.data["k"][None, :] - self.data["k"][:, None]) / bandwidth_strike
-            dt = (self.data["T"][None, :] == self.data["T"][:, None])*1.0
-            weights = np.exp(-(dk**2) / 2)*dt
-            weights /= np.sum(weights, axis=1)[:, None]
-            self.data["w_sm"] = np.sum(weights * self.data["w"][None, :], axis=1)
+        assert not self.qr is None
+        return pd.DataFrame(self.data), self.qr
 
-    def compute_vol(self,vol:ArrayLike, use_extrapolation:bool=True)->None:
-        '''
-        Computes volatilti from data
-        '''
-        self.eval=True
+    def compute_price(self, vol: ArrayLike, use_extrapolation: bool = True) -> None:
+        """
+        Computes price from data
+        """
+        self.eval = True
         keys = inspect.signature(self.model).parameters.keys()
         kw_args = {k: i for k, i in self.data.items() if k in keys}
         assert not self.qr is None
         if use_extrapolation:
-            return self.model.extr(vol=vol, qr=self.qr, **kw_args) # type: ignore
-        return self.model(vol=vol, qr=self.qr, **kw_args) # type: ignore
+            return self.model.extr(vol=vol, qr=self.qr, **kw_args)  # type: ignore
+        return self.model(vol=vol, qr=self.qr, **kw_args)  # type: ignore
+
+    def add_tag(self, data: ArrayLike, tag: str = "volume") -> None:
+        """
+        adds tag to data
+        """
+        self.data[tag] = convert_to_numpy(data)
