@@ -18,7 +18,7 @@ ArrayLike2 = List[List[Numeric]] | np.ndarray | pd.DataFrame
 NP_SER_FLOAT = npt.NDArray[np.float64] | Series[float]
 ARRAY_LIKE_RUNTIME_TYPES = (list, np.ndarray, pd.Series, pd.DataFrame)
 NUMERIC_RUNTIME_TYPES = (float, int)
-Dates = List[str] | List[pd.Timestamp] | Series[pd.Timestamp] | Series[str]
+Dates = List[str] | List[pd.Timestamp] | Series[pd.Timestamp] | Series[str] | pd.DatetimeIndex
 ndarray = np.typing.NDArray  # pylint: disable=C0103
 
 

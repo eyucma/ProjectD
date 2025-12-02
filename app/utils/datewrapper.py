@@ -5,6 +5,7 @@ This module contains functions to calculate business times as a fraction of a bu
 from typing import Dict
 
 import pandas as pd
+from pandas.tseries.holiday import USFederalHolidayCalendar
 
 from app.utils.types import Dates, ArrayLike
 
@@ -16,16 +17,21 @@ class DateWrapper:
 
     def __init__(
         self,
-        holidays: Dates,
+        holidays: Dates|None,
         time_now: pd.Timestamp | str,
         time_mapping: Dict[float, float] | None = None,
+        time_end: pd.Timestamp | str | None = None,
     ) -> None:
         if time_mapping is None:
             self.times = {}
         else:
             self.times = time_mapping
         self.now = time_now
-        self.holidays = holidays
+        if holidays is None:
+            assert not time_end is None
+            self.holidays = self.fetch_us_holidays(start=time_now, end=time_end)
+        else:
+            self.holidays = holidays
 
     def update(self, ts: ArrayLike) -> None:
         """
@@ -75,3 +81,19 @@ class DateWrapper:
 
         # Return T (total minutes / annual minutes)
         return len(minutes) / annual_trading_minutes
+
+    def fetch_us_holidays(
+        self, start: pd.Timestamp | str, end: pd.Timestamp | str
+    ) -> pd.DatetimeIndex:
+        """
+        Fetches US holidays between start and end
+        """
+        if isinstance(start, str):
+            start_dt = pd.to_datetime(start)
+        else:
+            start_dt = start
+        if isinstance(end, str):
+            end_dt = pd.to_datetime(end)
+        else:
+            end_dt = end
+        return USFederalHolidayCalendar().holidays(start=start_dt, end=end_dt)
