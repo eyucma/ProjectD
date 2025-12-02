@@ -191,8 +191,11 @@ class VolCalibrator:
             return self.model.extr(vol=vol, qr=self.qr, **kw_args)  # type: ignore
         return self.model(vol=vol, qr=self.qr, **kw_args)  # type: ignore
 
-    def add_tag(self, data: ArrayLike, tag: str = "volume") -> None:
+    def add_tag(self, df: ArrayLike, tag: str = "Volume") -> None:
         """
-        adds tag to data
+        adds tag:data to self.data
         """
-        self.data[tag] = convert_to_numpy(data)
+        if len(df)==len(self.data['k']):
+            self.data[tag] = np.array(df)
+        else:
+            raise ValueError(f'Data was length {len(df)} but expected {len(self.data['k'])}')

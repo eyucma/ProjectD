@@ -28,5 +28,6 @@ class SurfaceSchema(pa.DataFrameModel):
     '''
     T: Series[float] = pa.Field(ge=0)
     k: Series[float] = pa.Field() # Ensures 'k' is a float column
-    Vega: Series[float]
-    Volume: Series[float]
+    Vega: Series[float] = pa.Field(nullable=True)
+    Volume: Series[float] = pa.Field(nullable=True)
+    w: Series[float] = pa.Field(gt=0)
