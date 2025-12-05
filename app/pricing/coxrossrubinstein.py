@@ -1,4 +1,4 @@
-# pylint: disable=C0103
+# pylint: disable=C0103, R0913, R0914, R0917
 """
 This module contains Binomial pricing function using CoxRossRubinstein defined as class
 """
